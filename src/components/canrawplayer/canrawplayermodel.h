@@ -45,7 +45,7 @@ signals:
 
 private:
     std::unique_ptr<NodePainter> _painter;
-    moodycamel::ReaderWriterQueue<std::shared_ptr<NodeData>> _msgQueue{ 127 };
+    moodycamel::ReaderWriterQueue<std::shared_ptr<NodeData>> _msgQueue{ 256 };
 };
 
 #endif // CANRAWPLAYERMODEL_H
