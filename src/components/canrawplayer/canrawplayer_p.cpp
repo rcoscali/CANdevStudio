@@ -1,3 +1,4 @@
+#include <limits.h>
 #include "canrawplayer_p.h"
 #include <QCanBusFrame>
 #include <QFile>
@@ -72,23 +73,33 @@ void CanRawPlayerPrivate::loadTraceFile(const QString& filename)
 
     QTextStream in(&traceFile);
 
-    QRegularExpression re(R"(\((\d+\.\d{6})\)\s*\w*\s*([0-9,A-F]{1,8})\s*\[(\d)\]\s*((\s*[0-9,A-F]{2}){0,8}))");
+    unsigned int lowest_time = UINT_MAX;
+    unsigned int highest_time = 0;
+
+    QRegularExpression re(R"((\(((?<sec>\d+)\.(?<usec>\d{6}))\)\s*(?<canif>\w*)\s*(?<canid>[0-9a-fA-F]{1,8})\s*##\s*\d(?<payload>(\s*[0-9,A-F]{2})+))\sR)");
     while (!in.atEnd()) {
         QString line = in.readLine();
 
         const auto& match = re.match(line);
 
         if (match.hasMatch()) {
-            unsigned int time = static_cast<unsigned int>(std::stof(match.captured(1).toStdString()) * 1000 + 0.5);
-            auto id = std::stoul(match.captured(2).toStdString(), 0, 16);
-            auto payload = QByteArray::fromHex(match.captured(4).replace(" ", "").toLatin1());
+	  unsigned int sec = static_cast<unsigned int>(std::stoi(match.captured("sec").toStdString()));
+	  unsigned int msec = static_cast<unsigned int>(std::stoi(match.captured("usec").toStdString()));
+	    unsigned int time = sec * 1000 + msec/1000;
+	    if (time < lowest_time)
+	      lowest_time = time;
+	    if (time > highest_time)
+	      highest_time = time;
+            auto id = std::stoul(match.captured("canid").toStdString(), 0, 16);
+            auto payload = QByteArray::fromHex(match.captured("payload").replace(" ", "").toLatin1());
 
             QCanBusFrame frame(id, payload);
-            _frames.push_back({ time, std::move(frame) });
+            _frames.push_back({ time-lowest_time, std::move(frame) });
         }
     }
+    _start_ticks = lowest_time;
 
-    cds_info("Number of frames to play: {}", _frames.size());
+    cds_info("Number of frames to play: {} from {} ms to {} ms", _frames.size(), lowest_time, highest_time);
 
     traceFile.close();
 }
@@ -108,10 +119,10 @@ void CanRawPlayerPrivate::startPlayback()
 
 void CanRawPlayerPrivate::timeout()
 {
-    _ticks += _tick;
-
-    while (_frameNdx < _frames.size() && _frames[_frameNdx].first <= _ticks) {
-        emit q_ptr->sendFrame(_frames[_frameNdx].second);
-        ++_frameNdx;
-    }
+  _ticks += _tick;
+  
+  while (_frameNdx < _frames.size() && _frames[_frameNdx].first <= _ticks) {
+    emit q_ptr->sendFrame(_frames[_frameNdx].second);
+    ++_frameNdx;
+  }
 }

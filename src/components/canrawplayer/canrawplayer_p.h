@@ -43,6 +43,7 @@ private:
     CanRawPlayer* q_ptr;
     std::vector<std::pair<unsigned int, QCanBusFrame>> _frames;
     uint32_t _frameNdx;
+    uint32_t _start_ticks;
     uint32_t _ticks;
     QTimer _timer;
 
